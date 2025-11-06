@@ -1,0 +1,6 @@
+investpy
+pandas
+numpy
+lxml
+beautifulsoup4
+requests
