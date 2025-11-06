@@ -1,90 +1,70 @@
 import streamlit as st
 import pandas as pd
+import investpy
+from datetime import date, timedelta
 
 # ==============================
-# 🟢 دالة جلب بيانات بورصة تونس
+# 🔹 تحميل الشركات التونسية من investpy
 # ==============================
-def get_tunisian_stocks_data():
-    url = "https://www.bvmt.com.tn/fr/cours"
+@st.cache_data
+def get_tunisian_companies():
     try:
-        tables = pd.read_html(url)
-        df = tables[0]
-        # عرض الأعمدة الأصلية لمعرفة أسمائها
-        df.columns = [col.strip() for col in df.columns]
-
-        # التحقق من وجود العمود الأساسي (Valeurs)
-        if 'Valeurs' not in df.columns:
-            st.error("لم يتم العثور على عمود 'Valeurs' في الجدول. قد يكون الموقع غيّر التنسيق.")
-            st.write("الأعمدة الحالية:", list(df.columns))
-            return pd.DataFrame()
-
-        # إعادة تسمية الأعمدة إلى العربية
-        df = df.rename(columns={
-            'Valeurs': 'الشركة',
-            'Cours de clôture': 'سعر الإغلاق',
-            'Variation (%)': 'نسبة التغير',
-            'Ouverture': 'سعر الافتتاح',
-            'Plus haut': 'أعلى سعر',
-            'Plus bas': 'أدنى سعر',
-            'Volume': 'حجم التداول',
-            'Capitalisation (en DT)': 'القيمة السوقية'
-        }, errors='ignore')
-
-        return df
-
+        companies = investpy.stocks.get_stocks(country="tunisia")
+        return companies
     except Exception as e:
-        st.error(f"حدث خطأ أثناء تحميل البيانات: {e}")
+        st.error(f"حدث خطأ أثناء جلب قائمة الشركات: {e}")
         return pd.DataFrame()
 
 # ==============================
-# 🟢 واجهة Streamlit
+# 🔹 تحميل البيانات التاريخية لشركة معينة
 # ==============================
-st.set_page_config(page_title="تحليل الشركات التونسية - بورصة تونس", layout="wide")
+def get_stock_data_tunisia(stock_name, from_date, to_date):
+    try:
+        data = investpy.get_stock_historical_data(
+            stock=stock_name,
+            country="tunisia",
+            from_date=from_date.strftime("%d/%m/%Y"),
+            to_date=to_date.strftime("%d/%m/%Y")
+        )
+        return data
+    except Exception as e:
+        st.error(f"حدث خطأ أثناء تحميل بيانات {stock_name}: {e}")
+        return pd.DataFrame()
 
-st.title("📊 تحليل بيانات الشركات المدرجة في بورصة تونس (BVMT)")
+# ==============================
+# 🔹 واجهة Streamlit
+# ==============================
+st.set_page_config(page_title="تحليل الشركات التونسية", layout="wide")
+
+st.title("📊 تحليل الشركات المدرجة في بورصة تونس 🇹🇳")
 st.markdown("---")
 
-st.info("يتم جلب البيانات مباشرة من الموقع الرسمي لبورصة تونس (www.bvmt.com.tn).")
+# تحميل قائمة الشركات
+df_companies = get_tunisian_companies()
 
-# زر لتحديث البيانات
-if st.button("🔄 تحديث البيانات الآن"):
-    df = get_tunisian_stocks_data()
-    if not df.empty:
-        st.success("✅ تم تحميل البيانات بنجاح.")
-        st.dataframe(df, use_container_width=True)
-        st.session_state['df'] = df
-    else:
-        st.warning("⚠️ لم يتم العثور على بيانات.")
+if not df_companies.empty:
+    st.success("✅ تم تحميل قائمة الشركات التونسية بنجاح.")
+    company_name = st.selectbox("اختر الشركة:", df_companies["name"].sort_values().unique())
+    
+    if company_name:
+        st.markdown("### 🗓️ اختر فترة التحليل")
+
+        today = date.today()
+        start_date = st.date_input("من تاريخ:", today - timedelta(days=180))
+        end_date = st.date_input("إلى تاريخ:", today)
+
+        if st.button("عرض البيانات"):
+            with st.spinner("⏳ جاري تحميل بيانات السهم..."):
+                data = get_stock_data_tunisia(company_name, start_date, end_date)
+                if not data.empty:
+                    st.success(f"✅ تم تحميل بيانات {company_name}")
+                    st.dataframe(data.tail(), use_container_width=True)
+
+                    # رسم بياني بسيط
+                    st.line_chart(data["Close"], use_container_width=True)
+                else:
+                    st.warning("⚠️ لم يتم العثور على بيانات للسهم المحدد.")
 else:
-    df = st.session_state.get('df', pd.DataFrame())
+    st.error("❌ تعذّر تحميل قائمة الشركات التونسية من مصدر البيانات.")
 
-# ==============================
-# 🟢 قسم التحليل الإحصائي
-# ==============================
-if not df.empty and 'الشركة' in df.columns:
-    st.markdown("## 🔍 التحليل الإحصائي")
-
-    # تحويل القيم الرقمية
-    numeric_cols = ['سعر الإغلاق', 'سعر الافتتاح', 'أعلى سعر', 'أدنى سعر', 'نسبة التغير']
-    for col in numeric_cols:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', '.').str.replace('%', ''), errors='coerce')
-
-    # اختيار شركة للتحليل
-    company = st.selectbox("اختر الشركة:", df['الشركة'].unique())
-
-    if company:
-        selected = df[df['الشركة'] == company].iloc[0]
-        st.subheader(f"📈 تحليل: {company}")
-        st.write(f"- **سعر الإغلاق:** {selected.get('سعر الإغلاق', 'غير متوفر')}")
-        st.write(f"- **نسبة التغير:** {selected.get('نسبة التغير', 'غير متوفر')} %")
-        st.write(f"- **سعر الافتتاح:** {selected.get('سعر الافتتاح', 'غير متوفر')}")
-        st.write(f"- **أعلى سعر:** {selected.get('أعلى سعر', 'غير متوفر')}")
-        st.write(f"- **أدنى سعر:** {selected.get('أدنى سعر', 'غير متوفر')}")
-        st.write(f"- **القيمة السوقية:** {selected.get('القيمة السوقية', 'غير متوفر')}")
-else:
-    st.warning("📌 اضغط على الزر أعلاه لتحميل بيانات الشركات أولاً.")
-
-st.markdown("---")
-st.caption("🟢 المصدر: الموقع الرسمي لبورصة تونس BVMT – تم التطوير بواسطة Python و Streamlit.")
 
