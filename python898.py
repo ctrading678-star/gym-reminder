@@ -1,31 +1,50 @@
+import streamlit as st
 import investpy
 import datetime
+import pandas as pd
 
-# 1️⃣ تحديد اسم السهم والدولة
-stock_name = "SIAME"
-country_name = "tunisia"
+# عنوان التطبيق
+st.title("📈 تحميل بيانات الأسهم من Investing.com (تونس)")
 
-# 2️⃣ تحديد فترة البيانات (من إلى)
-from_date = datetime.date(2023, 1, 1)
-to_date = datetime.date.today()  # اليوم الحالي
+# --- الخطوة 1: جلب قائمة الأسهم المتاحة في تونس ---
+try:
+    stocks_list = investpy.stocks.get_stocks_list(country='tunisia')
+except Exception as e:
+    st.error(f"حدث خطأ أثناء تحميل قائمة الأسهم: {e}")
+    st.stop()
 
-# تأكد أن التاريخ الأخير أكبر من الأول
-if to_date <= from_date:
-    raise ValueError("⚠️ يجب أن يكون التاريخ الأخير بعد التاريخ الأول!")
+# --- الخطوة 2: اختيار السهم ---
+selected_stock = st.selectbox("🔍 اختر اسم السهم من القائمة:", stocks_list)
 
-# 3️⃣ تحميل البيانات من Investing
-data = investpy.get_stock_historical_data(
-    stock=stock_name,
-    country=country_name,
-    from_date=from_date.strftime("%d/%m/%Y"),
-    to_date=to_date.strftime("%d/%m/%Y")
-)
+# --- الخطوة 3: تحديد الفترة الزمنية ---
+col1, col2 = st.columns(2)
+with col1:
+    start_date = st.date_input("من تاريخ:", datetime.date(2023, 1, 1))
+with col2:
+    end_date = st.date_input("إلى تاريخ:", datetime.date.today())
 
-# 4️⃣ عرض أول 5 أسطر من البيانات
-print("✅ تم تحميل البيانات بنجاح:\n")
-print(data.head())
+# --- الخطوة 4: زر التحميل ---
+if st.button("📥 تحميل البيانات"):
+    if start_date >= end_date:
+        st.error("❌ يجب أن يكون تاريخ النهاية أكبر من تاريخ البداية.")
+    else:
+        try:
+            data = investpy.get_stock_historical_data(
+                stock=selected_stock,
+                country='tunisia',
+                from_date=start_date.strftime("%d/%m/%Y"),
+                to_date=end_date.strftime("%d/%m/%Y")
+            )
 
-# 5️⃣ حفظ البيانات في ملف CSV
-data.to_csv(f"{stock_name}_data.csv")
-print(f"\n💾 تم حفظ الملف: {stock_name}_data.csv")
+            st.success(f"✅ تم تحميل بيانات السهم: {selected_stock}")
+            st.dataframe(data)
+
+            # حفظ البيانات في ملف CSV
+            file_name = f"{selected_stock}_data.csv"
+            data.to_csv(file_name)
+            st.download_button("💾 تحميل الملف CSV", data.to_csv().encode('utf-8'), file_name, "text/csv")
+
+        except Exception as e:
+            st.error(f"⚠️ حدث خطأ أثناء تحميل البيانات: {e}")
+
 
