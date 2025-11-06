@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import requests
 
 # ==============================
 # 🟢 دالة جلب بيانات بورصة تونس
@@ -10,8 +9,16 @@ def get_tunisian_stocks_data():
     try:
         tables = pd.read_html(url)
         df = tables[0]
+        # عرض الأعمدة الأصلية لمعرفة أسمائها
         df.columns = [col.strip() for col in df.columns]
-        # تنظيف الأعمدة
+
+        # التحقق من وجود العمود الأساسي (Valeurs)
+        if 'Valeurs' not in df.columns:
+            st.error("لم يتم العثور على عمود 'Valeurs' في الجدول. قد يكون الموقع غيّر التنسيق.")
+            st.write("الأعمدة الحالية:", list(df.columns))
+            return pd.DataFrame()
+
+        # إعادة تسمية الأعمدة إلى العربية
         df = df.rename(columns={
             'Valeurs': 'الشركة',
             'Cours de clôture': 'سعر الإغلاق',
@@ -22,7 +29,9 @@ def get_tunisian_stocks_data():
             'Volume': 'حجم التداول',
             'Capitalisation (en DT)': 'القيمة السوقية'
         }, errors='ignore')
+
         return df
+
     except Exception as e:
         st.error(f"حدث خطأ أثناء تحميل البيانات: {e}")
         return pd.DataFrame()
@@ -43,17 +52,18 @@ if st.button("🔄 تحديث البيانات الآن"):
     if not df.empty:
         st.success("✅ تم تحميل البيانات بنجاح.")
         st.dataframe(df, use_container_width=True)
+        st.session_state['df'] = df
     else:
         st.warning("⚠️ لم يتم العثور على بيانات.")
 else:
-    st.write("اضغط على الزر أعلاه لجلب أحدث البيانات.")
+    df = st.session_state.get('df', pd.DataFrame())
 
 # ==============================
 # 🟢 قسم التحليل الإحصائي
 # ==============================
-st.markdown("## 🔍 التحليل الإحصائي")
+if not df.empty and 'الشركة' in df.columns:
+    st.markdown("## 🔍 التحليل الإحصائي")
 
-if 'df' in locals() and not df.empty:
     # تحويل القيم الرقمية
     numeric_cols = ['سعر الإغلاق', 'سعر الافتتاح', 'أعلى سعر', 'أدنى سعر', 'نسبة التغير']
     for col in numeric_cols:
@@ -73,10 +83,8 @@ if 'df' in locals() and not df.empty:
         st.write(f"- **أدنى سعر:** {selected.get('أدنى سعر', 'غير متوفر')}")
         st.write(f"- **القيمة السوقية:** {selected.get('القيمة السوقية', 'غير متوفر')}")
 else:
-    st.warning("لم يتم تحميل أي بيانات بعد.")
+    st.warning("📌 اضغط على الزر أعلاه لتحميل بيانات الشركات أولاً.")
 
 st.markdown("---")
 st.caption("🟢 المصدر: الموقع الرسمي لبورصة تونس BVMT – تم التطوير بواسطة Python و Streamlit.")
-
-
 
