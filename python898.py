@@ -1,47 +1,90 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import datetime
+import plotly.graph_objects as go
 
-st.title("📊 تحميل بيانات الأسهم من Yahoo Finance")
+# ===============================
+# واجهة التطبيق
+# ===============================
+st.set_page_config(page_title="تحميل بيانات الأسهم", layout="centered")
 
-# --- قائمة رموز الأسهم التونسية أو العالمية ---
-stocks = {
-    "SIAME (Tunisia)": "SIAME.TN",
-    "BT (Banque de Tunisie)": "BT.TN",
-    "BIAT": "BIAT.TN",
-    "TUNISAIR": "TAIR.TN",
-    "SFBT": "SFBT.TN",
-    "Office Plast": "PLS.TN"
+st.title("📈 تطبيق تحميل بيانات الأسهم")
+st.markdown("اختر الدولة والسهم لعرض بياناته التاريخية.")
+
+# ===============================
+# اختيار الدولة
+# ===============================
+countries = {
+    "الولايات المتحدة 🇺🇸": "US",
+    "فرنسا 🇫🇷": "FR",
+    "ألمانيا 🇩🇪": "DE",
+    "المملكة المتحدة 🇬🇧": "UK",
+    "اليابان 🇯🇵": "JP",
+    "كندا 🇨🇦": "CA",
+    "الهند 🇮🇳": "IN",
+    "تونس 🇹🇳": "TN"
 }
 
-# --- اختيار السهم ---
-selected_name = st.selectbox("🔍 اختر السهم:", list(stocks.keys()))
-ticker_symbol = stocks[selected_name]
+country_name = st.selectbox("اختر الدولة:", list(countries.keys()))
+country_code = countries[country_name]
 
-# --- اختيار الفترة الزمنية ---
-col1, col2 = st.columns(2)
-with col1:
-    start_date = st.date_input("من تاريخ:", datetime.date(2023, 1, 1))
-with col2:
-    end_date = st.date_input("إلى تاريخ:", datetime.date.today())
+# ===============================
+# اختيار السهم
+# ===============================
+st.write("✳️ أدخل رمز السهم (Ticker):")
+st.markdown("- في أمريكا مثلًا: `AAPL` (Apple) أو `MSFT` (Microsoft)")
+st.markdown("- في فرنسا: `AIR.PA` (Airbus)")
+st.markdown("- في ألمانيا: `BMW.DE` (BMW)")
+st.markdown("- في تونس أو الدول غير المدعومة من Yahoo قد لا تتوفر البيانات")
 
-# --- زر التحميل ---
-if st.button("📥 تحميل البيانات"):
-    if start_date >= end_date:
-        st.error("❌ يجب أن يكون تاريخ النهاية أكبر من تاريخ البداية.")
-    else:
-        data = yf.download(ticker_symbol, start=start_date, end=end_date)
+stock_symbol = st.text_input("رمز السهم", "AAPL")
+
+# ===============================
+# اختيار الفترة الزمنية
+# ===============================
+period = st.selectbox("الفترة الزمنية:", ["1mo", "3mo", "6mo", "1y", "2y", "5y", "10y"])
+
+# ===============================
+# عند الضغط على الزر
+# ===============================
+if st.button("تحميل البيانات"):
+    try:
+        data = yf.download(stock_symbol, period=period)
 
         if data.empty:
-            st.warning("⚠️ لا توجد بيانات في هذه الفترة للسهم المحدد.")
+            st.error("⚠️ لم يتم العثور على بيانات لهذا السهم. تأكد من الرمز والدولة.")
         else:
-            st.success(f"✅ تم تحميل بيانات {selected_name}")
-            st.dataframe(data)
+            st.success("✅ تم تحميل البيانات بنجاح!")
 
-            # حفظ الملف CSV
-            csv = data.to_csv().encode('utf-8')
-            file_name = f"{ticker_symbol}_data.csv"
-            st.download_button("💾 تحميل الملف CSV", csv, file_name, "text/csv")
+            # عرض البيانات في جدول
+            st.dataframe(data.tail(10))
+
+            # ===============================
+            # رسم بياني بالشموع اليابانية
+            # ===============================
+            fig = go.Figure(
+                data=[
+                    go.Candlestick(
+                        x=data.index,
+                        open=data['Open'],
+                        high=data['High'],
+                        low=data['Low'],
+                        close=data['Close']
+                    )
+                ]
+            )
+
+            fig.update_layout(
+                title=f"رسم بياني لسهم {stock_symbol}",
+                xaxis_title="التاريخ",
+                yaxis_title="السعر",
+                xaxis_rangeslider_visible=False
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+
+    except Exception as e:
+        st.error(f"حدث خطأ أثناء تحميل البيانات: {e}")
+
 
 
