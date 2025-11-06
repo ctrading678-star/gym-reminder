@@ -1,36 +1,45 @@
-# fetch_investing.py
-# مثال بسيط: تحميل بيانات تاريخية لسهم وحفظها في CSV
-import investpy
+# app.py
+import streamlit as st
+import pandas as pd
 import datetime
 
-def fetch_stock_history(stock_name, country, from_date, to_date, out_csv):
-    """
-    stock_name: اسم السهم كما يظهر في Investing.com (مثال: "SIAME")
-    country: اسم الدولة بالانجليزية (مثال: "tunisia")
-    from_date, to_date: بصيغة "dd/mm/yyyy" (مثال: "01/05/2025")
-    out_csv: اسم ملف الإخراج (مثال: "SIAME_data.csv")
-    """
-    try:
-        data = investpy.get_stock_historical_data(
-            stock=stock_name,
-            country=country,
-            from_date=from_date,
-            to_date=to_date
-        )
-        data.to_csv(out_csv, encoding="utf-8-sig")
-        print(f"✅ تم حفظ البيانات في: {out_csv}")
-        return True
-    except Exception as e:
-        print("❌ حدث خطأ أثناء تحميل البيانات:")
-        print(e)
-        return False
+st.set_page_config(page_title="📊 Investing Data Fetcher", layout="centered")
 
-if __name__ == "__main__":
-    # مثال استخدام:
-    stock_name = "SIAME"         # غيّر حسب الاسم الفعلي في Investing.com
-    country = "tunisia"         # الدولة باللغة الانجليزية
-    from_date = "01/05/2025"    # من تاريخ (يوم/شهر/سنة)
-    to_date = "06/11/2025"      # الى تاريخ
-    out_csv = "SIAME_data.csv"
+st.title("📈 تحميل بيانات سهم من Investing.com")
+st.markdown("أدخل المعطيات التالية لتحميل البيانات التاريخية وحفظها في ملف CSV")
 
-    fetch_stock_history(stock_name, country, from_date, to_date, out_csv)
+# --- إدخال البيانات من المستخدم ---
+stock_name = st.text_input("🔸 اسم السهم كما في Investing.com (مثال: SIAME)")
+country = st.text_input("🌍 الدولة بالإنجليزية (مثال: tunisia)")
+from_date = st.date_input("📅 من تاريخ", datetime.date(2025, 5, 1))
+to_date = st.date_input("📅 إلى تاريخ", datetime.date.today())
+out_csv = st.text_input("💾 اسم ملف CSV الناتج", "stock_data.csv")
+
+# --- عند الضغط على الزر ---
+if st.button("🚀 تحميل البيانات"):
+    if not stock_name or not country:
+        st.warning("الرجاء إدخال اسم السهم والدولة قبل المتابعة.")
+    else:
+        with st.spinner("⏳ جاري جلب البيانات من Investing.com ..."):
+            try:
+                import investpy
+
+                data = investpy.get_stock_historical_data(
+                    stock=stock_name,
+                    country=country,
+                    from_date=from_date.strftime("%d/%m/%Y"),
+                    to_date=to_date.strftime("%d/%m/%Y")
+                )
+
+                # حفظ البيانات
+                data.to_csv(out_csv, encoding="utf-8-sig")
+
+                st.success(f"✅ تم تحميل البيانات وحفظها في الملف: {out_csv}")
+                st.dataframe(data.tail(10))  # عرض آخر 10 أسطر
+                st.download_button("📥 تحميل CSV", data.to_csv().encode('utf-8-sig'), out_csv, "text/csv")
+
+            except Exception as e:
+                import traceback
+                st.error("❌ حدث خطأ أثناء تحميل البيانات:")
+                st.text(traceback.format_exc())
+
