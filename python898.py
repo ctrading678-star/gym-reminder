@@ -1,109 +1,82 @@
 import streamlit as st
-import yfinance as yf
 import pandas as pd
-import plotly.graph_objects as go
+import requests
 
-# ===============================
-# واجهة التطبيق
-# ===============================
-st.set_page_config(page_title="📈 بيانات الأسهم", layout="centered")
-
-st.title("📊 تحميل بيانات الأسهم")
-
-# ===============================
-# الدول والأسهم المتاحة
-# ===============================
-stocks_by_country = {
-    "🇺🇸 الولايات المتحدة": {
-        "Apple (AAPL)": "AAPL",
-        "Microsoft (MSFT)": "MSFT",
-        "Tesla (TSLA)": "TSLA",
-        "Nvidia (NVDA)": "NVDA"
-    },
-    "🇫🇷 فرنسا": {
-        "Airbus (AIR.PA)": "AIR.PA",
-        "LVMH (MC.PA)": "MC.PA",
-        "Renault (RNO.PA)": "RNO.PA"
-    },
-    "🇩🇪 ألمانيا": {
-        "BMW (BMW.DE)": "BMW.DE",
-        "Siemens (SIE.DE)": "SIE.DE",
-        "Volkswagen (VOW3.DE)": "VOW3.DE"
-    },
-    "🇬🇧 المملكة المتحدة": {
-        "HSBC (HSBA.L)": "HSBA.L",
-        "BP (BP.L)": "BP.L",
-        "AstraZeneca (AZN.L)": "AZN.L"
-    },
-    "🇯🇵 اليابان": {
-        "Toyota (7203.T)": "7203.T",
-        "Sony (6758.T)": "6758.T",
-        "Honda (7267.T)": "7267.T"
-    },
-    "🇨🇦 كندا": {
-        "Shopify (SHOP.TO)": "SHOP.TO",
-        "Royal Bank (RY.TO)": "RY.TO",
-        "TD Bank (TD.TO)": "TD.TO"
-    },
-    "🇮🇳 الهند": {
-        "Reliance (RELIANCE.NS)": "RELIANCE.NS",
-        "Tata Motors (TATAMOTORS.NS)": "TATAMOTORS.NS",
-        "Infosys (INFY.NS)": "INFY.NS"
-    }
-}
-
-# ===============================
-# اختيار الدولة
-# ===============================
-country = st.selectbox("🌍 اختر الدولة:", list(stocks_by_country.keys()))
-
-# ===============================
-# اختيار الشركة
-# ===============================
-companies = stocks_by_country[country]
-company_name = st.selectbox("🏢 اختر الشركة:", list(companies.keys()))
-stock_symbol = companies[company_name]
-
-# ===============================
-# تحميل البيانات (دائمًا لفترة شهر)
-# ===============================
-if st.button("تحميل البيانات"):
+# ==============================
+# 🟢 دالة جلب بيانات بورصة تونس
+# ==============================
+def get_tunisian_stocks_data():
+    url = "https://www.bvmt.com.tn/fr/cours"
     try:
-        data = yf.download(stock_symbol, period="1mo")
-
-        if data.empty:
-            st.error("⚠️ لم يتم العثور على بيانات لهذا السهم.")
-        else:
-            st.success(f"✅ تم تحميل بيانات {company_name} بنجاح!")
-
-            # عرض آخر 10 أيام من البيانات
-            st.dataframe(data.tail(10))
-
-            # ===============================
-            # رسم بياني بالشموع اليابانية
-            # ===============================
-            fig = go.Figure(
-                data=[
-                    go.Candlestick(
-                        x=data.index,
-                        open=data['Open'],
-                        high=data['High'],
-                        low=data['Low'],
-                        close=data['Close']
-                    )
-                ]
-            )
-
-            fig.update_layout(
-                title=f"رسم بياني لسهم {company_name}",
-                xaxis_title="📅 التاريخ",
-                yaxis_title="💲 السعر",
-                xaxis_rangeslider_visible=False
-            )
-
-            st.plotly_chart(fig, use_container_width=True)
-
+        tables = pd.read_html(url)
+        df = tables[0]
+        df.columns = [col.strip() for col in df.columns]
+        # تنظيف الأعمدة
+        df = df.rename(columns={
+            'Valeurs': 'الشركة',
+            'Cours de clôture': 'سعر الإغلاق',
+            'Variation (%)': 'نسبة التغير',
+            'Ouverture': 'سعر الافتتاح',
+            'Plus haut': 'أعلى سعر',
+            'Plus bas': 'أدنى سعر',
+            'Volume': 'حجم التداول',
+            'Capitalisation (en DT)': 'القيمة السوقية'
+        }, errors='ignore')
+        return df
     except Exception as e:
         st.error(f"حدث خطأ أثناء تحميل البيانات: {e}")
+        return pd.DataFrame()
+
+# ==============================
+# 🟢 واجهة Streamlit
+# ==============================
+st.set_page_config(page_title="تحليل الشركات التونسية - بورصة تونس", layout="wide")
+
+st.title("📊 تحليل بيانات الشركات المدرجة في بورصة تونس (BVMT)")
+st.markdown("---")
+
+st.info("يتم جلب البيانات مباشرة من الموقع الرسمي لبورصة تونس (www.bvmt.com.tn).")
+
+# زر لتحديث البيانات
+if st.button("🔄 تحديث البيانات الآن"):
+    df = get_tunisian_stocks_data()
+    if not df.empty:
+        st.success("✅ تم تحميل البيانات بنجاح.")
+        st.dataframe(df, use_container_width=True)
+    else:
+        st.warning("⚠️ لم يتم العثور على بيانات.")
+else:
+    st.write("اضغط على الزر أعلاه لجلب أحدث البيانات.")
+
+# ==============================
+# 🟢 قسم التحليل الإحصائي
+# ==============================
+st.markdown("## 🔍 التحليل الإحصائي")
+
+if 'df' in locals() and not df.empty:
+    # تحويل القيم الرقمية
+    numeric_cols = ['سعر الإغلاق', 'سعر الافتتاح', 'أعلى سعر', 'أدنى سعر', 'نسبة التغير']
+    for col in numeric_cols:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', '.').str.replace('%', ''), errors='coerce')
+
+    # اختيار شركة للتحليل
+    company = st.selectbox("اختر الشركة:", df['الشركة'].unique())
+
+    if company:
+        selected = df[df['الشركة'] == company].iloc[0]
+        st.subheader(f"📈 تحليل: {company}")
+        st.write(f"- **سعر الإغلاق:** {selected.get('سعر الإغلاق', 'غير متوفر')}")
+        st.write(f"- **نسبة التغير:** {selected.get('نسبة التغير', 'غير متوفر')} %")
+        st.write(f"- **سعر الافتتاح:** {selected.get('سعر الافتتاح', 'غير متوفر')}")
+        st.write(f"- **أعلى سعر:** {selected.get('أعلى سعر', 'غير متوفر')}")
+        st.write(f"- **أدنى سعر:** {selected.get('أدنى سعر', 'غير متوفر')}")
+        st.write(f"- **القيمة السوقية:** {selected.get('القيمة السوقية', 'غير متوفر')}")
+else:
+    st.warning("لم يتم تحميل أي بيانات بعد.")
+
+st.markdown("---")
+st.caption("🟢 المصدر: الموقع الرسمي لبورصة تونس BVMT – تم التطوير بواسطة Python و Streamlit.")
+
 
 
